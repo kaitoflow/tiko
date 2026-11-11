@@ -13,7 +13,7 @@ flowchart TB
         S["技能与任务协议<br/>分工、权限与工作方法"]
         P["任务交接<br/>用户原话 · 原始材料 · 协调者判断 · 相关反馈"]
         B["项目绑定<br/>按账户隔离 · 一项目一专家"]
-        X["通信桥接<br/>CLI send/read 或 MCP prepare/send/thread"]
+        X["通信桥接<br/>CLI send/read<br/>或 prepare 后通过 MCP 发送与读回"]
     end
 
     G["项目 Grok Bot<br/>独立选择分析、共创、质询或评审"]

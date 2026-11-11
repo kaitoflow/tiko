@@ -5,7 +5,7 @@ description: 创建或复用按项目绑定的 Grok Bot 专家，处理证据分
 
 # Tiko
 
-用户显式说“内部专家”，即按本 Skill 调用当前项目绑定的 Grok Bot，根据任务阶段选择 `analysis`、`design`、`grill` 或 `review`，不固定为评审，主动读回并核验结果；用户明确指定探索、讨论等其他模式时遵从该模式。不得以 Codex 子代理、自检或独立 Judge 替代。隐式调用规则保持不变。
+用户显式说“内部专家”，即按本 Skill 调用当前项目绑定的 Grok Bot，由调用方按阶段建议 `analysis`、`design`、`grill` 或 `review`，专家独立判断实际方法，不固定为评审，主动读回并核验结果；用户明确指定探索、讨论等其他模式时遵从该模式。不得以 Codex 子代理、自检或独立 Judge 替代。隐式调用规则保持不变。
 
 `tiko` 是调用入口；专家固定为每个项目自己的 **Grok Bot**。本机 CLI 是 Grok Bot 的管理和消息客户端，不把 Grok 编码 CLI、其他模型或独立 Grok Judge 当成项目专家的替代品。本 Skill 供调用方创建、委派并回收结果，不是让专家 Bot 再委派自己。
 
@@ -23,7 +23,7 @@ Bot 名称直接使用 Codex 的项目显示名，原样保留中文、空格和
 
 ## 调用入口
 
-- 已加载 MCP 时先解析项目专家，随后用 `grok-bot` 的 `gbot_send`、`gbot_thread`，目标传刚返回的 `botId`，发送设置 `replyMode: "manual"`。
+- 已加载 MCP 时先解析项目专家，用仓库的 `tiko prepare` 生成消息正文（传入 ensure 返回的 projectName/root，与目标 botId 核对），随后用 `grok-bot` 的 `gbot_send`、`gbot_thread`，目标传刚返回的 `botId`，message 使用 prepare 返回值，发送设置 `replyMode: "manual"`，requestId 使用同一任务 ID。上游幂等性未经验证，MCP 和 legacy 路径没有本地重复登记保护，结果未知时只读回、不重发。
 - MCP 未加载时使用全局 `tiko`；PATH 未刷新时使用本机兼容入口：
 
 ```sh
@@ -42,7 +42,7 @@ node /absolute/path/to/tiko/bridge/tiko.mjs read --project /absolute/project/roo
 
 同一 Bot 的聊天历史是线索，不是事实权威。任务包引用项目已有的需求、决策与验证文档及版本；没有记录时明确缺口。重要新决定由 Codex 在任务授权范围内更新已有合适记录，必要时才创建最小决策记录，保留理由、假设、验证结果及替代关系；不强制每轮建文档，不改项目顶层 README。不得把本机记录等同于专家已经读取。
 
-## 按任务选择专家模式
+## 按任务建议专家方法
 
 | mode | 适用情况 | 调用方负责什么 |
 | --- | --- | --- |
@@ -51,11 +51,23 @@ node /absolute/path/to/tiko/bridge/tiko.mjs read --project /absolute/project/roo
 | `grill` | 用户要讨论设计，或存在会实质改变路线、范围、验收的关键决定 | 汇总专家问题向用户回问，再将实际回答交回同一项目 Bot |
 | `review` | 用户要第二意见、方案压力测试，或重要方案需要独立审查 | 确保专家独立初审原始材料；核对依据后按需交换分歧，保留异议并作最终判断 |
 
-读 [专家任务协议](references/expert-modes.md) 的通用条款和选中模式，交接相应段落或可实际读取的绝对路径。专家读取的是这份协议，不是调用本 Skill。`mode` 写入任务文件或 MCP 消息；它不是新增的 CLI 参数。
+读 [专家任务协议](references/expert-modes.md) 的通用条款和选中模式，交接相应段落或可实际读取的绝对路径。专家读取的是这份协议，不是调用本 Skill。建议方法写入任务文件或 MCP 消息，回复的 `mode` 表示实际方法。专家可在目标和授权范围内调整，重要偏离说明依据；涉及改变交付目标时只能提议。它不是新增的 CLI 参数。
 
-先按用户目的和项目阶段选择模式；需要形成方案用 design，需要审查已有方案用 review，关键用户取舍未定才用 grill，查证解释用 analysis。不要求每次都走完所有模式，也不为切换模式另建专家。
+调用方先按用户目的和项目阶段建议模式；需要形成方案用 design，需要审查已有方案用 review，关键用户取舍未定才用 grill，查证解释用 analysis。不要求每次都走完所有模式，也不为切换模式另建专家。
 
 范围清楚的任务直接交接，低影响选择沿用既有授权和合理默认。事实优先查资料；只有资料不能回答、且会改变结果或行动边界的问题才回问。模式可随真实缺口切换，不能自动启动完整访谈、固定多轮辩论或额外审批。
+
+## v0.2.0 交接与反馈
+
+专家是对建议及其验证结果负责的独立第二判断者。允许独立分析和赞同，不要求对抗；没有异议时说明检查范围。重要结论说明依据及改变判断的条件，按实际影响给出，不强制每条小建议都填模板。
+
+交接用户原话、原始材料、调用方判断时分层标注；专家披露哪些内容来自直接读取、调用方提供的原文、调用方转述，不把输入当独立取证。建议执行结果在相关后续轮次回传，旧立场被推翻时说明错因或前提变化。
+
+可用 `node bridge/tiko.mjs prepare --task-file <任务.json> --task-id <ID>` 生成无网络、无状态写入的消息；MCP 发送该输出的 message，CLI send 使用同一模块。示例任务见仓库 `examples/task.json`，反馈模板见 `references/feedback.md`。也兼容旧文本任务，但来源未分层时明确其限制。
+
+回读的 `protocol_valid` / `completed_reply_observed` 只表示格式完整；`round_goal_reported_complete` 是专家报告的本轮状态，`quality_verified` 固定为 false，由 Codex 实际核验内容。同 Bot 单次案例结果仅作冒烟证据，不能称为盲测或泛化质量保证。后续代码不应把这些字段当成授权或验收证明。
+
+不默认新增项目读取权、持久记忆权限、后台监控或推送。模式改变不改变权限。不要求为反馈另建数据库，优先更新项目已有合适记录，不编辑顶层 README。
 
 ## 选择访问路径
 

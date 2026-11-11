@@ -5,11 +5,12 @@ import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createProjectStore, readActiveAccountScope } from './project-bots.mjs';
 import {taskReplyProtocol} from './task-reply.mjs';
+import {loadTask,buildTaskMessage} from './task-envelope.mjs';
 
 const launcher=fileURLToPath(new URL('./launch.mjs',import.meta.url));
 const legacyPath=new URL('./verified-setup.json',import.meta.url);
-const legacy=existsSync(legacyPath)?JSON.parse(readFileSync(legacyPath,'utf8')):null;
-const store=createProjectStore();
+let legacy;
+let store;
 const {positionals,values}=parseArgs({allowPositionals:true,options:{
   help:{type:'boolean',short:'h'},'task-file':{type:'string'},'task-id':{type:'string'},
   project:{type:'string'},'project-id':{type:'string'},'project-name':{type:'string'},
@@ -29,6 +30,7 @@ function run(args){
 }
 const identify=()=>store.identify({project:values.project,projectId:values['project-id'],projectName:values['project-name']});
 function legacyDestination(){
+  legacy=existsSync(legacyPath)?JSON.parse(readFileSync(legacyPath,'utf8')):null;
   if(!legacy || legacy.accountScope!==store.accountScope)fail('LEGACY_ACCOUNT_UNBOUND','The legacy shared Bot has no verified binding to this account; use the project expert');
   return {botId:legacy.bot_id,botName:legacy.bot_name,legacy:true};
 }
@@ -39,9 +41,16 @@ function destination(create=false){
   return {...bot,identity};
 }
 try{
+  // Formatting a task is pure: do not create state or contact Grok Bot.
+  if(positionals[0]==='prepare'){
+    if(!values['task-file']||!values['task-id'])fail('TASK_REQUIRED','prepare requires --task-file and --task-id');
+    console.log(JSON.stringify({message:buildTaskMessage({taskId:values['task-id'],task:loadTask(values['task-file']),root:values.project??'按任务指定',projectName:values['project-name']??'当前项目',botName:values['project-name']??'项目专家'})}));
+    process.exit(0);
+  }
+  store=createProjectStore();
   if(values.help||command==='help'){
     console.log('Grok Bot project experts: one Bot per project, shared by all its Codex chats.\n'+
-      'tiko projects\ntiko project ensure --project <root> [--project-id <Codex project ID>]\n'+
+      'tiko prepare --task-file <json|text> --task-id <id>\ntiko projects\ntiko project ensure --project <root> [--project-id <Codex project ID>]\n'+
       'tiko status [--project <root>]\ntiko send --task-file <UTF-8 file> [--project <root>] [--task-id <id>]\n'+
       'tiko read --task-id <id> [--project <root>] [--after <cursor>] [--limit 40]\n'+
       'Inside a known project, its root is detected. --legacy explicitly selects the old shared Tiko.');
@@ -64,16 +73,11 @@ try{
     }
   }else if(command==='send'){
     if(!values['task-file'])fail('TASK_REQUIRED','send requires --task-file');
-    const task=readFileSync(values['task-file'],'utf8');
-    if(!task.trim()||Buffer.byteLength(task)>64000)fail('TASK_SIZE','Task must be nonempty and at most 64 KB');
+    const task=loadTask(values['task-file']);
     const id=values['task-id']??`TIKO_${randomUUID()}`;
     if(!/^[A-Za-z0-9_-]{1,128}$/.test(id))fail('TASK_ID','Use letters, digits, underscore or hyphen in task IDs');
     const bot=destination(true);if(!bot.legacy)store.rememberTask(id,bot.identity,bot);
-    const scope=bot.legacy?'通用任务':`项目「${bot.projectName}」，项目根目录：${bot.root}，项目绑定：${bot.key}`;
-    const message=`Codex 委派给 ${bot.botName} 的任务，任务 ID：${id}。${scope}。`+
-      '同一项目的不同 Codex 聊天共用这个专家 Bot；仅处理当前任务和授权范围。'+
-      '只在当前 Grok Bot 会话回复，Codex 主动读回并作最终决定，不为回传调用 codex_send。'+
-      `最终回复以 ${id} BEGIN 开头、${id} END 结尾，必须单独写出 mode: analysis|design|grill|review 中的本轮模式，以及 status: complete|needs_user|needs_evidence 中的实际状态；按任务指定模式交付结论、依据、未确认事项。\n\n${task}`;
+    const message=buildTaskMessage({taskId:id,task,projectName:bot.projectName??'通用任务',root:bot.root??'按任务指定',botName:bot.botName});
     const receipt=run(['send','--reply-mode','manual','--request-id',id,'--json',bot.botId,message]);
     console.log(JSON.stringify({task_id:id,project:bot.identity??null,bot:bot.botName,bot_id:bot.botId,receipt,
       note:'Send once; read the matching task before retrying an uncertain receipt.'}));
@@ -93,6 +97,6 @@ try{
     const complete=Boolean(protocol);
     console.log(JSON.stringify({task_id:id,project:bot.identity??null,bot:bot.botName,bot_id:bot.botId,
       cursor:data.cursor??rows.at(-1)?.id,gapReset:data.gapReset,task_visible:entries.length>0,
-      completed_reply_observed:complete,protocol:protocol??null,entries}));
+      completed_reply_observed:complete,protocol_valid:complete,round_goal_reported_complete:complete&&protocol.status==='complete',quality_verified:false,protocol:protocol??null,entries}));
   }else fail('COMMAND','Unknown command; use tiko --help');
 }catch(error){console.error(JSON.stringify({error:{code:error.code??'invalid-input',message:error.message}}));process.exitCode=1;}

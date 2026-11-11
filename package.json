@@ -1,0 +1,13 @@
+{
+  "name": "tiko-project-expert",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Project-bound Grok Bot expert workflow for Codex",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs"
+  }
+}

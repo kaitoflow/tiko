@@ -1,0 +1,35 @@
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+auth.json
+Cookies*
+# Dependencies and generated files
+node_modules/
+.venv/
+__pycache__/
+*.py[cod]
+.DS_Store
+*.log
+*.tmp
+coverage/
+# Local task material
+state/
+logs/
+backups/
+tasks/
+receipts/
+settings.local.json
+# Account identities, bindings, private task history
+accounts/
+project-catalog.json
+project-bots.json
+project-bots.lock
+project-bots.json.*.tmp
+verified-setup.json
+migration-project-bindings*.json
+gateway-descriptor.json
